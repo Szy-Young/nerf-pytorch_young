@@ -1,0 +1,50 @@
+exp_base: ckpt/llff/fern
+random_seed: 0
+
+# Logging
+wandb:
+  project: nerf_llff_fern
+  name: vanilla
+
+# Data
+dataset_type: llff
+data_root: /home/ziyang/Desktop/Datasets/nerf_dataset/nerf_llff_data/fern
+#data_root: /media/SSD/ziyang/Datasets/nerf_dataset/nerf_llff_data/fern
+factor: 8
+hold_for_test: 8
+
+# Fourier embedding
+n_freq_point: 10
+n_freq_view: 4
+
+# MLP
+n_layer: 8
+n_dim: 256
+use_viewdir: True
+rgb_act: sigmoid
+density_act: relu
+
+# Ray & point sampling
+use_batching: True
+use_ndc: True
+n_sample_ray: 1024
+n_sample_point: 64
+n_sample_point_fine: 64
+perturb: True
+density_noise_std: 1.0
+
+# Rendering
+no_batching: True
+white_bkgd: False
+
+# Training
+n_iters: 200000
+lrate: 0.0005
+lrate_decay: 0.1
+lrate_decay_step: 500000
+
+val_freq: 500
+save_freq: 1000
+
+chunk: 4096
+half_res: True
