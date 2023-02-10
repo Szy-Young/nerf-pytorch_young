@@ -1,15 +1,15 @@
-exp_base: ckpt/blender/ship_softplus
+exp_base: ckpt/blender/lego_softplus_25
 random_seed: 0
 
 # Logging
 wandb:
-  project: nerf_blender_ship
-  name: shifted_softplus
+  project: nerf_blender_lego
+  name: shifted_softplus_25
 
 # Data
 dataset_type: blender
-data_root: /home/ziyang/Desktop/Datasets/nerf_dataset/nerf_synthetic/ship
-#data_root: /media/SSD/ziyang/Datasets/nerf_dataset/nerf_synthetic/ship
+#data_root: /home/ziyang/Desktop/Datasets/nerf_dataset/nerf_synthetic/lego
+data_root: /media/SSD/ziyang/Datasets/nerf_dataset/nerf_synthetic/lego
 
 # Fourier embedding
 n_freq_point: 10

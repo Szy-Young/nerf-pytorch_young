@@ -29,6 +29,20 @@ def convert_rays_to_ndc(rays_o, rays_d, img_h, img_w, focal, near_plane=1.):
     return rays_o, rays_d
 
 
+def restore_ndc_points(points, img_h, img_w, focal, near_plane=1.):
+    """
+    :param points: (Nr, 3) torch.Tensor.
+    :return:
+        points: (Nr, 3) torch.Tensor.
+    """
+    x, y, z = points[:, 0], points[:, 1], points[:, 2]
+    p_z = (2 * near_plane) / (z - 1)
+    p_x = - x * p_z * img_w / (2 * focal)
+    p_y = - y * p_z * img_h / (2 * focal)
+    points = torch.stack([p_x, p_y, p_z], 1)
+    return points
+
+
 class Rays:
     def __init__(self,
                  rays_o,

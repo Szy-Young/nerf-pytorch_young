@@ -1,10 +1,10 @@
-exp_base: ckpt/blender/ship_softplus
+exp_base: ckpt/blender/ship_softplus_25
 random_seed: 0
 
 # Logging
 wandb:
   project: nerf_blender_ship
-  name: shifted_softplus
+  name: shifted_softplus_25
 
 # Data
 dataset_type: blender

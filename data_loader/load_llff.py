@@ -82,7 +82,8 @@ def recenter_poses(poses):
     bottom = np.tile(np.reshape(bottom, [1, 1, 4]), [poses.shape[0], 1, 1])
     poses = np.concatenate([poses, bottom], 1)
     poses = np.linalg.inv(c2w) @ poses
-    return poses[:, :3]
+    # return poses[:, :3]
+    return poses
 
 
 def load_llff_data(data_root, factor=8, recenter=True, bound_factor=.75):

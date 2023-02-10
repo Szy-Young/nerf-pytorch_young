@@ -8,8 +8,8 @@ wandb:
 
 # Data
 dataset_type: llff
-#data_root: /home/ziyang/Desktop/Datasets/nerf_dataset/nerf_llff_data/fern
-data_root: /media/SSD/ziyang/Datasets/nerf_dataset/nerf_llff_data/fern
+data_root: /home/ziyang/Desktop/Datasets/nerf_dataset/nerf_llff_data/fern
+#data_root: /media/SSD/ziyang/Datasets/nerf_dataset/nerf_llff_data/fern
 factor: 8
 hold_for_test: 8
 

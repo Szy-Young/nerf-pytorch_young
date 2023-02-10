@@ -5,15 +5,15 @@ import yaml
 import argparse
 import numpy as np
 import imageio
+import open3d as o3d
 
 import torch
 import torch.nn as nn
 
 from model import FourierEmbedding, NeRF
-from camera import Camera, Rays, convert_rays_to_ndc
+from camera import Camera, Rays, convert_rays_to_ndc, restore_ndc_points
 from render import nerf_render
-from metric import mse_to_psnr
-from utils.pytorch_util import AverageMeter
+from utils.visual_util import build_colored_pointcloud
 
 
 # Create tensor on GPU by default ('.to(device)' & '.cuda()' cost time!)
@@ -31,6 +31,12 @@ if __name__ == '__main__':
         configs = yaml.load(f, Loader=yaml.FullLoader)
     for ckey, cvalue in configs.items():
         args.__dict__[ckey] = cvalue
+
+    # Fix the random seed
+    seed = args.random_seed
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
 
     # Load the data
     if args.dataset_type == 'blender':
@@ -64,6 +70,7 @@ if __name__ == '__main__':
         else:
             near = bounds.min() * 0.9
             far = bounds.max()
+
     else:
         raise ValueError('Not implemented!')
 
@@ -111,7 +118,6 @@ if __name__ == '__main__':
     Traverse the testing set
     """
     tbar = tqdm(total=n_view_test)
-    eval_meter = AverageMeter()
     for vid in range(n_view_test):
         target = torch.Tensor(imgs_test[vid])
         pose = torch.Tensor(poses_test[vid])
@@ -120,54 +126,82 @@ if __name__ == '__main__':
         cam = Camera(img_h, img_w, focal, pose)
         rays_o, rays_d = cam.get_rays()
         rays_o, rays_d = rays_o.reshape(-1, 3), rays_d.reshape(-1, 3)
+        viewdirs = rays_d / rays_d.norm(dim=1, keepdim=True)
+        if args.use_ndc:
+            rays_o, rays_d = convert_rays_to_ndc(rays_o, rays_d, img_h, img_w, focal, near_plane=1.)
 
         # Batchify
         rgb_map, rgb_map_fine = [], []
+        depth_map, depth_map_fine = [], []
+        acc_map, acc_map_fine = [], []
         for i in range(0, rays_o.shape[0], args.chunk):
             # Forward
             with torch.no_grad():
-                rays_o_batch = rays_o[i:(i+args.chunk)]
-                rays_d_batch = rays_d[i:(i+args.chunk)]
-                viewdirs = rays_d_batch / rays_d_batch.norm(dim=1, keepdim=True)
-                if args.use_ndc:
-                    rays_o_batch, rays_d_batch = convert_rays_to_ndc(rays_o_batch, rays_d_batch,
-                                                                     img_h, img_w, focal, near_plane=1.)
-                rays = Rays(rays_o_batch, rays_d_batch, viewdirs,
+                rays_o_batch = rays_o[i:(i + args.chunk)]
+                rays_d_batch = rays_d[i:(i + args.chunk)]
+                viewdirs_batch = viewdirs[i:(i + args.chunk)]
+                rays = Rays(rays_o_batch, rays_d_batch, viewdirs_batch,
                             args.n_sample_point, args.n_sample_point_fine, near, far, args.perturb)
                 ret_dict = nerf_render(rays, point_embedding, view_embedding, model, model_fine,
                                        density_noise_std=0.,
                                        white_bkgd=args.white_bkgd)
 
                 rgb_map.append(ret_dict['rgb_map'])
-                if args.n_sample_point_fine > 0:
-                    rgb_map_fine.append(ret_dict['rgb_map_fine'])
+                depth_map.append(ret_dict['depth_map'])
+                acc_map.append(ret_dict['acc_map'])
+                rgb_map_fine.append(ret_dict['rgb_map_fine'])
+                depth_map_fine.append(ret_dict['depth_map_fine'])
+                acc_map_fine.append(ret_dict['acc_map_fine'])
 
-        rgb_map = torch.cat(rgb_map, 0).reshape(target.shape)
-        loss_img = img_loss(rgb_map, target)
-        psnr = mse_to_psnr(loss_img.detach().cpu())
-        if args.n_sample_point_fine > 0:
-            rgb_map_fine = torch.cat(rgb_map_fine, 0).reshape(target.shape)
-            loss_img_fine = img_loss(rgb_map_fine, target)
-            psnr_fine = mse_to_psnr(loss_img_fine.detach().cpu())
-        else:
-            loss_img_fine = torch.zeros()
-            psnr_fine = torch.zeros()
-        loss = loss_img + loss_img_fine
+        rgb_map = torch.cat(rgb_map, 0)
+        depth_map = torch.cat(depth_map, 0)
+        acc_map = torch.cat(acc_map, 0)
+        rgb_map_fine = torch.cat(rgb_map_fine, 0)
+        depth_map_fine = torch.cat(depth_map_fine, 0)
+        acc_map_fine = torch.cat(acc_map_fine, 0)
 
-        # Accumulate test results
-        eval_meter.append_loss({'mse': loss_img.item(), 'mse_fine': loss_img_fine.item(),
-                                'psnr': psnr.item(), 'psnr_fine': psnr_fine.item()})
+        # Cast depth to 3D points
+        points = rays_o + depth_map.unsqueeze(1) * rays_d
+        points_fine = rays_o + depth_map_fine.unsqueeze(1) * rays_d
+        if args.use_ndc:
+            points = restore_ndc_points(points, img_h, img_w, focal, near_plane=1.)
+            points_fine = restore_ndc_points(points_fine, img_h, img_w, focal, near_plane=1.)
 
-        # Save rendered images
+        points = points.cpu().numpy()
         rgb_map = rgb_map.cpu().numpy().clip(0., 1.)
-        save_path = osp.join(save_render_base, '%06d.png'%(vid))
-        imageio.imwrite(save_path, rgb_map)
+        acc_map = acc_map.cpu().numpy()
+        points_fine = points_fine.cpu().numpy()
         rgb_map_fine = rgb_map_fine.cpu().numpy().clip(0., 1.)
-        save_path_fine = osp.join(save_render_base, '%06d_fine.png'%(vid))
-        imageio.imwrite(save_path_fine, rgb_map_fine)
+        acc_map_fine = acc_map_fine.cpu().numpy()
+
+        # Filter out empty points
+        acc_thresh = 0.99
+        valid = (acc_map > acc_thresh)
+        points, rgb_map = points[valid], rgb_map[valid]
+        valid_fine = (acc_map_fine > acc_thresh)
+        points_fine, rgb_map_fine = points_fine[valid_fine], rgb_map_fine[valid_fine]
+
+        # Visualize
+        cam_pose = pose.cpu().numpy()
+        coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0)
+        coord_frame.transform(cam_pose)
+
+        vis = o3d.visualization.Visualizer()
+        vis.create_window()
+        opt = vis.get_render_option()
+        opt.background_color = np.asarray([0, 0, 0])
+
+        # pcds = [build_colored_pointcloud(points, rgb_map)]
+        # pcds.append(coord_frame)
+        # o3d.visualization.draw_geometries(pcds)
+        # pcds = [build_colored_pointcloud(points_fine, rgb_map_fine)]
+        # pcds.append(coord_frame)
+        # o3d.visualization.draw_geometries(pcds)
+
+        # vis.add_geometry(build_colored_pointcloud(points, rgb_map))
+        vis.add_geometry(build_colored_pointcloud(points_fine, rgb_map_fine))
+        vis.add_geometry(coord_frame)
+        vis.run()
+        vis.destroy_window()
 
         tbar.update(1)
-
-    # Log test results
-    eval_avg = eval_meter.get_mean_loss_dict()
-    print(eval_avg)

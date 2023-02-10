@@ -1,15 +1,15 @@
-exp_base: ckpt/llff/fern_softplus
+exp_base: ckpt/llff/trex_softplus
 random_seed: 0
 
 # Logging
 wandb:
-  project: nerf_llff_fern
+  project: nerf_llff_trex
   name: shifted_softplus
 
 # Data
 dataset_type: llff
-#data_root: /home/ziyang/Desktop/Datasets/nerf_dataset/nerf_llff_data/fern
-data_root: /media/SSD/ziyang/Datasets/nerf_dataset/nerf_llff_data/fern
+data_root: /home/ziyang/Desktop/Datasets/nerf_dataset/nerf_llff_data/trex
+#data_root: /media/SSD/ziyang/Datasets/nerf_dataset/nerf_llff_data/trex
 factor: 8
 hold_for_test: 8
 
