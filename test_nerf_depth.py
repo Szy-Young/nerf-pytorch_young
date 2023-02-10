@@ -32,12 +32,6 @@ if __name__ == '__main__':
     for ckey, cvalue in configs.items():
         args.__dict__[ckey] = cvalue
 
-    # Fix the random seed
-    seed = args.random_seed
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-
-
     # Load the data
     if args.dataset_type == 'blender':
         from data_loader.load_blender import load_blender_data
@@ -70,7 +64,6 @@ if __name__ == '__main__':
         else:
             near = bounds.min() * 0.9
             far = bounds.max()
-
     else:
         raise ValueError('Not implemented!')
 
@@ -127,9 +120,6 @@ if __name__ == '__main__':
         cam = Camera(img_h, img_w, focal, pose)
         rays_o, rays_d = cam.get_rays()
         rays_o, rays_d = rays_o.reshape(-1, 3), rays_d.reshape(-1, 3)
-        viewdirs = rays_d / rays_d.norm(dim=1, keepdim=True)
-        if args.use_ndc:
-            rays_o, rays_d = convert_rays_to_ndc(rays_o, rays_d, img_h, img_w, focal, near_plane=1.)
 
         # Batchify
         rgb_map, rgb_map_fine = [], []
@@ -138,8 +128,11 @@ if __name__ == '__main__':
             with torch.no_grad():
                 rays_o_batch = rays_o[i:(i+args.chunk)]
                 rays_d_batch = rays_d[i:(i+args.chunk)]
-                viewdirs_batch = viewdirs[i:(i+args.chunk)]
-                rays = Rays(rays_o_batch, rays_d_batch, viewdirs_batch,
+                viewdirs = rays_d_batch / rays_d_batch.norm(dim=1, keepdim=True)
+                if args.use_ndc:
+                    rays_o_batch, rays_d_batch = convert_rays_to_ndc(rays_o_batch, rays_d_batch,
+                                                                     img_h, img_w, focal, near_plane=1.)
+                rays = Rays(rays_o_batch, rays_d_batch, viewdirs,
                             args.n_sample_point, args.n_sample_point_fine, near, far, args.perturb)
                 ret_dict = nerf_render(rays, point_embedding, view_embedding, model, model_fine,
                                        density_noise_std=0.,
