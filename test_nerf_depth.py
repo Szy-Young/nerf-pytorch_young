@@ -118,6 +118,7 @@ if __name__ == '__main__':
     Traverse the testing set
     """
     tbar = tqdm(total=n_view_test)
+    point_clouds, point_colors = [], []
     for vid in range(n_view_test):
         target = torch.Tensor(imgs_test[vid])
         pose = torch.Tensor(poses_test[vid])
@@ -185,23 +186,19 @@ if __name__ == '__main__':
         cam_pose = pose.cpu().numpy()
         coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0)
         coord_frame.transform(cam_pose)
+        # pcd = build_colored_pointcloud(points, rgb_map)
+        pcd = build_colored_pointcloud(points_fine, rgb_map_fine)
+        o3d.visualization.draw_geometries([pcd, coord_frame])
 
-        vis = o3d.visualization.Visualizer()
-        vis.create_window()
-        opt = vis.get_render_option()
-        opt.background_color = np.asarray([0, 0, 0])
-
-        # pcds = [build_colored_pointcloud(points, rgb_map)]
-        # pcds.append(coord_frame)
-        # o3d.visualization.draw_geometries(pcds)
-        # pcds = [build_colored_pointcloud(points_fine, rgb_map_fine)]
-        # pcds.append(coord_frame)
-        # o3d.visualization.draw_geometries(pcds)
-
-        # vis.add_geometry(build_colored_pointcloud(points, rgb_map))
-        vis.add_geometry(build_colored_pointcloud(points_fine, rgb_map_fine))
-        vis.add_geometry(coord_frame)
-        vis.run()
-        vis.destroy_window()
+        # Accumulate
+        point_clouds.append(points_fine)
+        point_colors.append(rgb_map_fine)
 
         tbar.update(1)
+
+    # Visualize accumulated point clouds
+    points = np.concatenate(point_clouds, 0)
+    rgb_map = np.concatenate(point_colors, 0)
+    pcd = build_colored_pointcloud(points, rgb_map)
+    coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0)
+    o3d.visualization.draw_geometries([pcd, coord_frame])
