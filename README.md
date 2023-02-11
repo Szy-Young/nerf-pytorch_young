@@ -39,7 +39,7 @@ python test_nerf_depth.py config/blender/lego_softplus.yaml --checkpoint 199000
 python test_nerf_depth.py config/llff/fern_softplus.yaml --checkpoint 199000
 ```
 
-Examples of visualized point clouds:
-<img src="figures/lego.png" alt="drawing" width=800/>
-<img src="figures/mic.png" alt="drawing" width=800/>
-<img src="figures/trex.png" alt="drawing" width=800/>
+Examples of visualized point clouds (Coordinate frame denotes the camera, red=x, green=y, blue=z):
+<img src="figures/lego.png" alt="drawing" width=400/>
+<img src="figures/mic.png" alt="drawing" width=400/>
+<img src="figures/trex.png" alt="drawing" width=400/>
