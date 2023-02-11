@@ -1,15 +1,17 @@
-exp_base: ckpt/blender/mic_softplus
+exp_base: ckpt/llff/trex_softplus_wonoise
 random_seed: 0
 
 # Logging
 wandb:
-  project: nerf_blender_mic
-  name: shifted_softplus
+  project: nerf_llff_trex
+  name: shifted_softplus_wonoise
 
 # Data
-dataset_type: blender
-data_root: /home/ziyang/Desktop/Datasets/nerf_dataset/nerf_synthetic/mic
-#data_root: /media/SSD/ziyang/Datasets/nerf_dataset/nerf_synthetic/mic
+dataset_type: llff
+data_root: /home/ziyang/Desktop/Datasets/nerf_dataset/nerf_llff_data/trex
+#data_root: /media/SSD/ziyang/Datasets/nerf_dataset/nerf_llff_data/trex
+factor: 8
+hold_for_test: 8
 
 # Fourier embedding
 n_freq_point: 10
@@ -20,29 +22,26 @@ n_layer: 8
 n_dim: 256
 use_viewdir: True
 rgb_act: sigmoid
-density_act: shifted_softplus
+density_act: relu
 
 # Ray & point sampling
-use_batching: False
-use_ndc: False
+use_batching: True
+use_ndc: True
 n_sample_ray: 1024
 n_sample_point: 64
-n_sample_point_fine: 128
+n_sample_point_fine: 64
 perturb: True
 density_noise_std: 0.0
 
 # Rendering
 no_batching: True
-white_bkgd: True
+white_bkgd: False
 
 # Training
 n_iters: 200000
 lrate: 0.0005
 lrate_decay: 0.1
 lrate_decay_step: 500000
-
-precrop_iters: 500
-precrop_frac: 0.5
 
 val_freq: 500
 save_freq: 1000
