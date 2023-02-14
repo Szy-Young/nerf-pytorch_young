@@ -127,12 +127,10 @@ if __name__ == '__main__':
         # Forward
         with torch.no_grad():
             points_batch = points[i:(i + args.chunk_point)]
-            points_batch = points_batch.unsqueeze(1)
             viewdirs_batch = torch.ones_like(points_batch)       # viewdirs is not used, feed any value is OK
             _, density_batch = point_query(points_batch, viewdirs_batch,
                                            point_embedding, view_embedding, model, model_fine,
                                            fine_sampling=fine_sampling)
-            density_batch = density_batch.squeeze(1)
             density.append(density_batch)
 
     density = torch.cat(density, 0)
@@ -143,8 +141,8 @@ if __name__ == '__main__':
     Visualize non-empty 3D points
     """
     # Filter out empty points
-    density_thresh = 1
-    density_range = 2 # 2000
+    density_thresh = 100
+    density_range = 200
     valid = (density > density_thresh)
     points, density = points[valid], density[valid]
 

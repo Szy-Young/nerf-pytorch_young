@@ -51,5 +51,5 @@ val_freq: 500
 save_freq: 1000
 
 chunk_ray: 4096
-chunk_point: 4096*256
+chunk_point: 1000000
 half_res: True
