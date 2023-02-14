@@ -92,8 +92,9 @@ if __name__ == '__main__':
     model.load_state_dict(torch.load(weight_path))
 
     # Create the network (fine) and load trained model weights
+    fine_sampling = (args.n_sample_point_fine > 0)
     model_fine = None
-    if args.n_sample_point_fine > 0:
+    if fine_sampling and args.two_model_for_fine:
         model_fine = NeRF(n_layer=args.n_layer,
                           n_dim=args.n_dim,
                           input_dim=point_embedding.output_dim,
@@ -133,15 +134,16 @@ if __name__ == '__main__':
 
         # Batchify
         rgb_map, rgb_map_fine = [], []
-        for i in range(0, rays_o.shape[0], args.chunk):
+        for i in range(0, rays_o.shape[0], args.chunk_ray):
             # Forward
             with torch.no_grad():
-                rays_o_batch = rays_o[i:(i+args.chunk)]
-                rays_d_batch = rays_d[i:(i+args.chunk)]
-                viewdirs_batch = viewdirs[i:(i+args.chunk)]
+                rays_o_batch = rays_o[i:(i+args.chunk_ray)]
+                rays_d_batch = rays_d[i:(i+args.chunk_ray)]
+                viewdirs_batch = viewdirs[i:(i+args.chunk_ray)]
                 rays = Rays(rays_o_batch, rays_d_batch, viewdirs_batch,
                             args.n_sample_point, args.n_sample_point_fine, near, far, args.perturb)
                 ret_dict = nerf_render(rays, point_embedding, view_embedding, model, model_fine,
+                                       fine_sampling=fine_sampling,
                                        density_noise_std=0.,
                                        white_bkgd=args.white_bkgd)
 

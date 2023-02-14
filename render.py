@@ -42,15 +42,19 @@ def nerf_render(rays,
                 view_embedding,
                 model,
                 model_fine=None,
+                fine_sampling=False,
                 density_noise_std=0.0,
                 white_bkgd=False):
     # Sample points on rays
     points, viewdirs, z_vals = rays.sample_points()
+    n_ray, n_point = points.shape[:2]
+    points, viewdirs = points.reshape(-1, 3), viewdirs.reshape(-1, 3)
 
     # Query
     points = point_embedding(points)
     viewdirs = view_embedding(viewdirs)
     rgb, density = model(points, viewdirs, density_noise_std)
+    rgb, density = rgb.reshape(n_ray, n_point, 3), density.reshape(n_ray, n_point)
 
     # Differentiable volume render
     z_vals = z_vals
@@ -68,15 +72,21 @@ def nerf_render(rays,
 
 
     # Query & volume render with model-fine
-    if model_fine is not None:
+    if fine_sampling:
         # Re-sample points on rays w.r.t importance (points in occupied regions)
         points, viewdirs, z_vals = rays.sample_points_fine(z_vals,
                                                            weights.detach())
+        n_ray, n_point = points.shape[:2]
+        points, viewdirs = points.reshape(-1, 3), viewdirs.reshape(-1, 3)
 
         # Query
         points = point_embedding(points)
         viewdirs = view_embedding(viewdirs)
-        rgb, density = model_fine(points, viewdirs, density_noise_std)
+        if model_fine is not None:
+            rgb, density = model_fine(points, viewdirs, density_noise_std)
+        else:
+            rgb, density = model(points, viewdirs, density_noise_std)
+        rgb, density = rgb.reshape(n_ray, n_point, 3), density.reshape(n_ray, n_point)
 
         # Differentiable volume render
         rgb_map, depth_map, acc_map, disp_map, weights = volume_render(rgb,
@@ -92,3 +102,30 @@ def nerf_render(rays,
         ret_dict = ret_dict | ret_dict_fine
 
     return ret_dict
+
+
+def point_query(points,
+                viewdirs,
+                point_embedding,
+                view_embedding,
+                model,
+                model_fine=None,
+                fine_sampling=False):
+    """
+    Direct query values for points, without doing rendering
+    :param points: (N, 3).
+    :param viewdirs: (N, 3), if provided.
+    :return:
+        rgb: (N, 3)
+        density: (N, 3)
+    """
+    points = point_embedding(points)
+    if viewdirs is not None:
+        viewdirs = view_embedding(viewdirs)
+
+    # Query
+    if fine_sampling and (model_fine is not None):
+        rgb, density = model_fine(points, viewdirs, density_noise_std=0.)
+    else:
+        rgb, density = model(points, viewdirs, density_noise_std=0.)
+    return rgb, density

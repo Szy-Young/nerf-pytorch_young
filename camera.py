@@ -31,9 +31,9 @@ def convert_rays_to_ndc(rays_o, rays_d, img_h, img_w, focal, near_plane=1.):
 
 def restore_ndc_points(points, img_h, img_w, focal, near_plane=1.):
     """
-    :param points: (Nr, 3) torch.Tensor.
+    :param points: (N, 3) torch.Tensor.
     :return:
-        points: (Nr, 3) torch.Tensor.
+        points: (N, 3) torch.Tensor.
     """
     x, y, z = points[:, 0], points[:, 1], points[:, 2]
     p_z = (2 * near_plane) / (z - 1)

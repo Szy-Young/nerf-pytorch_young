@@ -1,15 +1,15 @@
-exp_base: ckpt/blender/lego_softplus
+exp_base: ckpt/blender/lego_softplus_1model_ntcoarse
 random_seed: 0
 
 # Logging
 wandb:
   project: nerf_blender_lego
-  name: shifted_softplus
+  name: shifted_softplus_1model_ntcoarse
 
 # Data
 dataset_type: blender
-data_root: /home/ziyang/Desktop/Datasets/nerf_dataset/nerf_synthetic/lego
-#data_root: /media/SSD/ziyang/Datasets/nerf_dataset/nerf_synthetic/lego
+#data_root: /home/ziyang/Desktop/Datasets/nerf_dataset/nerf_synthetic/lego
+data_root: /media/SSD/ziyang/Datasets/nerf_dataset/nerf_synthetic/lego
 
 # Fourier embedding
 n_freq_point: 10
@@ -22,8 +22,8 @@ use_viewdir: True
 rgb_act: sigmoid
 density_act: shifted_softplus
 
-two_model_for_fine: True
-train_on_coarse: True
+two_model_for_fine: False
+train_on_coarse: False
 
 # Ray & point sampling
 use_batching: False

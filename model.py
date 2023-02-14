@@ -54,12 +54,14 @@ class NeRF(nn.Module):
             else:
                 self.point_fc.append(nn.Linear(n_dim, n_dim))
 
-
-        self.view_fc = nn.ModuleList([nn.Linear(n_dim + input_view_dim, n_dim // 2)])
-        self.feat_fc = nn.Linear(n_dim, n_dim)
-        self.density_fc = nn.Linear(n_dim, 1)
-        self.rgb_fc = nn.Linear(n_dim // 2, 3)
-
+        if use_viewdir:
+            self.view_fc = nn.ModuleList([nn.Linear(n_dim + input_view_dim, n_dim // 2)])
+            self.feat_fc = nn.Linear(n_dim, n_dim)
+            self.density_fc = nn.Linear(n_dim, 1)
+            self.rgb_fc = nn.Linear(n_dim // 2, 3)
+        else:
+            self.density_fc = nn.Linear(n_dim, 1)
+            self.rgb_fc = nn.Linear(n_dim, 3)
 
         # # Output branch for density
         # self.density_fc = nn.Linear(n_dim, 1)
@@ -83,12 +85,12 @@ class NeRF(nn.Module):
 
     def forward(self, point, view=None, density_noise_std=0.):
         """
-        :param point: (Nr, Np, C) torch.Tensor.
-        :param view: (Nr, Np, C) torch.Tensor, if provided.
+        :param point: (N, C) torch.Tensor.
+        :param view: (N, C) torch.Tensor, if provided.
         :param density_noise_std: Noise added to raw density output
         :return:
-            rgb: (Nr, Np, 3) torch.Tensor.
-            density: (Nr, Np) torch.Tensor.
+            rgb: (N, 3) torch.Tensor.
+            density: (N,) torch.Tensor.
         """
         h = point
         # Point -> feature
@@ -96,7 +98,7 @@ class NeRF(nn.Module):
             h = self.point_fc[l](h)
             h = F.relu(h)
             if l in self.skips:
-                h = torch.cat([point, h], -1)
+                h = torch.cat([point, h], 1)
 
         # Output branch for density
         density = self.density_fc(h)
@@ -104,7 +106,7 @@ class NeRF(nn.Module):
         # Output branch for RGB color
         if self.use_viewdir:
             feat = self.feat_fc(h)
-            h = torch.cat([feat, view], -1)
+            h = torch.cat([feat, view], 1)
             for l in range(len(self.view_fc)):
                 h = self.view_fc[l](h)
                 h = F.relu(h)
@@ -120,9 +122,53 @@ class NeRF(nn.Module):
         # Output activations
         rgb = self.rgb_act(rgb)
         density = self.density_act(density)
-        density = density.squeeze(2)
+        density = density.squeeze(1)
 
         return rgb, density
+
+
+    # def forward(self, point, view=None, density_noise_std=0.):
+    #     """
+    #     :param point: (Nr, Np, C) torch.Tensor.
+    #     :param view: (Nr, Np, C) torch.Tensor, if provided.
+    #     :param density_noise_std: Noise added to raw density output
+    #     :return:
+    #         rgb: (Nr, Np, 3) torch.Tensor.
+    #         density: (Nr, Np) torch.Tensor.
+    #     """
+    #     h = point
+    #     # Point -> feature
+    #     for l in range(len(self.point_fc)):
+    #         h = self.point_fc[l](h)
+    #         h = F.relu(h)
+    #         if l in self.skips:
+    #             h = torch.cat([point, h], -1)
+    #
+    #     # Output branch for density
+    #     density = self.density_fc(h)
+    #
+    #     # Output branch for RGB color
+    #     if self.use_viewdir:
+    #         feat = self.feat_fc(h)
+    #         h = torch.cat([feat, view], -1)
+    #         for l in range(len(self.view_fc)):
+    #             h = self.view_fc[l](h)
+    #             h = F.relu(h)
+    #         rgb = self.rgb_fc(h)
+    #     else:
+    #         rgb = self.rgb_fc(h)
+    #
+    #     # Add noise to raw density output
+    #     if density_noise_std > 0.:
+    #         noise = density_noise_std * torch.randn(density.shape)
+    #         density += noise
+    #
+    #     # Output activations
+    #     rgb = self.rgb_act(rgb)
+    #     density = self.density_act(density)
+    #     density = density.squeeze(2)
+    #
+    #     return rgb, density
 
 
 if __name__ == '__main__':
@@ -130,6 +176,7 @@ if __name__ == '__main__':
     point = torch.randn(8, 1024, 3)
     view = torch.randn(8, 1024, 3)
 
+    point, view = point.reshape(-1, 3), view.reshape(-1, 3)
     point_embedding = FourierEmbedding(n_freq=10)
     point = point_embedding(point)
     view_embedding = FourierEmbedding(n_freq=4)
@@ -138,7 +185,7 @@ if __name__ == '__main__':
     nerf = NeRF(use_viewdir=True,
                 input_dim=point_embedding.output_dim,
                 input_view_dim=view_embedding.output_dim)
-    output = nerf(point, view)
-    print(output)
-    print(output.shape)
+    rgb, density = nerf(point, view)
+    print(rgb)
+    print(rgb.shape)
     print('Number of parameters:', sum(p.numel() for p in nerf.parameters() if p.requires_grad))

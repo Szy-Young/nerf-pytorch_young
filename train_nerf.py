@@ -106,8 +106,10 @@ if __name__ == '__main__':
     grad_vars = list(model.parameters())
 
     # Create the network (fine)
+    fine_sampling = (args.n_sample_point_fine > 0)
+    assert fine_sampling or args.train_on_coarse, 'At least train on one of coarse/fine rendering results!'
     model_fine = None
-    if args.n_sample_point_fine > 0:
+    if fine_sampling and args.two_model_for_fine:
         model_fine = NeRF(n_layer=args.n_layer,
                           n_dim=args.n_dim,
                           input_dim=point_embedding.output_dim,
@@ -147,7 +149,7 @@ if __name__ == '__main__':
     Training loop
     """
     tbar = tqdm(total=args.n_iters)
-    for it in range(args.n_iters):
+    for it in range(1, args.n_iters+1):
         # Sample rays from all views in each iter
         if args.use_batching:
             rays_batch = rays_train[i_batch:(i_batch+args.n_sample_ray)]
@@ -181,18 +183,23 @@ if __name__ == '__main__':
             rays_o, rays_d = convert_rays_to_ndc(rays_o, rays_d, img_h, img_w, focal, near_plane=1.)
         rays = Rays(rays_o, rays_d, viewdirs, args.n_sample_point, args.n_sample_point_fine, near, far, args.perturb)
         ret_dict = nerf_render(rays, point_embedding, view_embedding, model, model_fine,
+                               fine_sampling=fine_sampling,
                                density_noise_std=args.density_noise_std,
                                white_bkgd=args.white_bkgd)
 
         loss_img = img_loss(ret_dict['rgb_map'], target)
         psnr = mse_to_psnr(loss_img.detach().cpu())
-        if args.n_sample_point_fine > 0:
+        if fine_sampling:
             loss_img_fine = img_loss(ret_dict['rgb_map_fine'], target)
             psnr_fine = mse_to_psnr(loss_img_fine.detach().cpu())
         else:
             loss_img_fine = torch.zeros()
             psnr_fine = torch.zeros()
-        loss = loss_img + loss_img_fine
+
+        if args.train_on_coarse:
+            loss = loss_img + loss_img_fine
+        else:
+            loss = loss_img_fine
 
         # Backward
         optimizer.zero_grad()
@@ -206,7 +213,8 @@ if __name__ == '__main__':
         # Save model checkpoint
         if it % args.save_freq == 0:
             torch.save(model.state_dict(), osp.join(args.exp_base, 'model_%06d.pth.tar'%(it)))
-            torch.save(model_fine.state_dict(), osp.join(args.exp_base, 'model_%06d_fine.pth.tar'%(it)))
+            if model_fine is not None:
+                torch.save(model_fine.state_dict(), osp.join(args.exp_base, 'model_%06d_fine.pth.tar'%(it)))
 
         # Decay learning rate
         new_lrate = args.lrate * (args.lrate_decay ** (it / args.lrate_decay_step))
@@ -232,33 +240,33 @@ if __name__ == '__main__':
 
             # Batchify
             rgb_map, rgb_map_fine = [], []
-            for i in range(0, rays_o.shape[0], args.chunk):
+            for i in range(0, rays_o.shape[0], args.chunk_ray):
                 # Forward
                 with torch.no_grad():
-                    rays_o_batch = rays_o[i:(i+args.chunk)]
-                    rays_d_batch = rays_d[i:(i+args.chunk)]
-                    viewdirs_batch = viewdirs[i:(i + args.chunk)]
+                    rays_o_batch = rays_o[i:(i+args.chunk_ray)]
+                    rays_d_batch = rays_d[i:(i+args.chunk_ray)]
+                    viewdirs_batch = viewdirs[i:(i + args.chunk_ray)]
                     rays = Rays(rays_o_batch, rays_d_batch, viewdirs_batch,
                                 args.n_sample_point, args.n_sample_point_fine, near, far, args.perturb)
                     ret_dict = nerf_render(rays, point_embedding, view_embedding, model, model_fine,
+                                           fine_sampling=fine_sampling,
                                            density_noise_std=0.,
                                            white_bkgd=args.white_bkgd)
 
                     rgb_map.append(ret_dict['rgb_map'])
-                    if args.n_sample_point_fine > 0:
+                    if fine_sampling:
                         rgb_map_fine.append(ret_dict['rgb_map_fine'])
 
             rgb_map = torch.cat(rgb_map, 0).reshape(target.shape)
             loss_img = img_loss(rgb_map, target)
             psnr = mse_to_psnr(loss_img.detach().cpu())
-            if args.n_sample_point_fine > 0:
+            if fine_sampling > 0:
                 rgb_map_fine = torch.cat(rgb_map_fine, 0).reshape(target.shape)
                 loss_img_fine = img_loss(rgb_map_fine, target)
                 psnr_fine = mse_to_psnr(loss_img_fine.detach().cpu())
             else:
                 loss_img_fine = torch.zeros()
                 psnr_fine = torch.zeros()
-            loss = loss_img + loss_img_fine
 
             # Add validation logs
             rgb_map = rgb_map.cpu().numpy().clip(0., 1.)

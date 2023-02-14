@@ -22,6 +22,9 @@ use_viewdir: True
 rgb_act: sigmoid
 density_act: shifted_softplus
 
+two_model_for_fine: True
+train_on_coarse: True
+
 # Ray & point sampling
 use_batching: False
 use_ndc: False
@@ -47,5 +50,6 @@ precrop_frac: 0.5
 val_freq: 500
 save_freq: 1000
 
-chunk: 4096
+chunk_ray: 4096
+chunk_point: 4096*256
 half_res: True

@@ -24,6 +24,9 @@ use_viewdir: True
 rgb_act: sigmoid
 density_act: relu
 
+two_model_for_fine: True
+train_on_coarse: True
+
 # Ray & point sampling
 use_batching: True
 use_ndc: True
@@ -46,5 +49,6 @@ lrate_decay_step: 500000
 val_freq: 500
 save_freq: 1000
 
-chunk: 4096
+chunk_ray: 4096
+chunk_point: 4096*256
 half_res: True

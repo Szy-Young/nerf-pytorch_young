@@ -1,6 +1,5 @@
 import os
 import os.path as osp
-from tqdm import tqdm
 import yaml
 import argparse
 import numpy as np
@@ -11,8 +10,7 @@ import torch
 import torch.nn as nn
 
 from model import FourierEmbedding, NeRF
-from camera import Camera, Rays, convert_rays_to_ndc, restore_ndc_points
-from render import nerf_render
+from render import point_query
 from utils.visual_util import build_colored_pointcloud
 
 
@@ -88,7 +86,6 @@ if __name__ == '__main__':
                  rgb_act=args.rgb_act,
                  density_act=args.density_act)
     weight_path = osp.join(args.exp_base, 'model_%06d.pth.tar'%(args.checkpoint))
-    # weight_path = osp.join(args.exp_base, 'model_%06d_fine.pth.tar'%(args.checkpoint))
     model.load_state_dict(torch.load(weight_path))
 
     # Create the network (fine) and load trained model weights
@@ -111,96 +108,67 @@ if __name__ == '__main__':
 
     # Create path to save rendered images
     exp_base = args.exp_base
-    save_render_base = osp.join(exp_base, 'test_%06d'%(args.checkpoint))
+    save_render_base = osp.join(exp_base, 'test_%06d_3dspace'%(args.checkpoint))
     os.makedirs(save_render_base, exist_ok=True)
 
 
     """
-    Traverse the testing set
+    Directly observe the NeRF density at 3D space points
     """
-    tbar = tqdm(total=n_view_test)
-    point_clouds, point_colors = [], []
-    for vid in range(n_view_test):
-        target = torch.Tensor(imgs_test[vid])
-        pose = torch.Tensor(poses_test[vid])
+    volume_size = 2.0
+    volume_sample = 400
+    points = torch.linspace(-volume_size, volume_size, steps=volume_sample+1)
+    points = torch.stack(torch.meshgrid([points, points, points]), -1)
+    points = points.reshape(-1, 3)
 
-        # Get rays for all pixels
-        cam = Camera(img_h, img_w, focal, pose)
-        rays_o, rays_d = cam.get_rays()
-        rays_o, rays_d = rays_o.reshape(-1, 3), rays_d.reshape(-1, 3)
-        viewdirs = rays_d / rays_d.norm(dim=1, keepdim=True)
-        if args.use_ndc:
-            rays_o, rays_d = convert_rays_to_ndc(rays_o, rays_d, img_h, img_w, focal, near_plane=1.)
+    # Batchify
+    density = []
+    for i in range(0, points.shape[0], args.chunk_point):
+        # Forward
+        with torch.no_grad():
+            points_batch = points[i:(i + args.chunk_point)]
+            points_batch = points_batch.unsqueeze(1)
+            viewdirs_batch = torch.ones_like(points_batch)       # viewdirs is not used, feed any value is OK
+            _, density_batch = point_query(points_batch, viewdirs_batch,
+                                           point_embedding, view_embedding, model, model_fine,
+                                           fine_sampling=fine_sampling)
+            density_batch = density_batch.squeeze(1)
+            density.append(density_batch)
 
-        # Batchify
-        rgb_map, rgb_map_fine = [], []
-        depth_map, depth_map_fine = [], []
-        acc_map, acc_map_fine = [], []
-        for i in range(0, rays_o.shape[0], args.chunk_ray):
-            # Forward
-            with torch.no_grad():
-                rays_o_batch = rays_o[i:(i + args.chunk_ray)]
-                rays_d_batch = rays_d[i:(i + args.chunk_ray)]
-                viewdirs_batch = viewdirs[i:(i + args.chunk_ray)]
-                rays = Rays(rays_o_batch, rays_d_batch, viewdirs_batch,
-                            args.n_sample_point, args.n_sample_point_fine, near, far, args.perturb)
-                ret_dict = nerf_render(rays, point_embedding, view_embedding, model, model_fine,
-                                       fine_sampling=fine_sampling,
-                                       density_noise_std=0.,
-                                       white_bkgd=args.white_bkgd)
+    density = torch.cat(density, 0)
+    density = density.reshape([volume_sample+1, volume_sample+1, volume_sample+1]).cpu().numpy()
+    points = points.reshape([volume_sample+1, volume_sample+1, volume_sample+1, 3]).cpu().numpy()
 
-                rgb_map.append(ret_dict['rgb_map'])
-                depth_map.append(ret_dict['depth_map'])
-                acc_map.append(ret_dict['acc_map'])
-                rgb_map_fine.append(ret_dict['rgb_map_fine'])
-                depth_map_fine.append(ret_dict['depth_map_fine'])
-                acc_map_fine.append(ret_dict['acc_map_fine'])
+    """
+    Visualize non-empty 3D points
+    """
+    # Filter out empty points
+    density_thresh = 1
+    density_range = 2 # 2000
+    valid = (density > density_thresh)
+    points, density = points[valid], density[valid]
 
-        rgb_map = torch.cat(rgb_map, 0)
-        depth_map = torch.cat(depth_map, 0)
-        acc_map = torch.cat(acc_map, 0)
-        rgb_map_fine = torch.cat(rgb_map_fine, 0)
-        depth_map_fine = torch.cat(depth_map_fine, 0)
-        acc_map_fine = torch.cat(acc_map_fine, 0)
+    # # Check density range
+    # import matplotlib.pyplot as plt
+    # plt.plot(np.sort(density))
+    # plt.show()
 
-        # Cast depth to 3D points
-        points = rays_o + depth_map.unsqueeze(1) * rays_d
-        points_fine = rays_o + depth_map_fine.unsqueeze(1) * rays_d
-        if args.use_ndc:
-            points = restore_ndc_points(points, img_h, img_w, focal, near_plane=1.)
-            points_fine = restore_ndc_points(points_fine, img_h, img_w, focal, near_plane=1.)
-
-        points = points.cpu().numpy()
-        rgb_map = rgb_map.cpu().numpy().clip(0., 1.)
-        acc_map = acc_map.cpu().numpy()
-        points_fine = points_fine.cpu().numpy()
-        rgb_map_fine = rgb_map_fine.cpu().numpy().clip(0., 1.)
-        acc_map_fine = acc_map_fine.cpu().numpy()
-
-        # Filter out empty points
-        acc_thresh = 0.99
-        valid = (acc_map > acc_thresh)
-        points, rgb_map = points[valid], rgb_map[valid]
-        valid_fine = (acc_map_fine > acc_thresh)
-        points_fine, rgb_map_fine = points_fine[valid_fine], rgb_map_fine[valid_fine]
-
-        # Visualize
-        cam_pose = pose.cpu().numpy()
-        coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0)
-        coord_frame.transform(cam_pose)
-        # pcd = build_colored_pointcloud(points, rgb_map)
-        pcd = build_colored_pointcloud(points_fine, rgb_map_fine)
-        o3d.visualization.draw_geometries([pcd, coord_frame])
-
-        # Accumulate
-        point_clouds.append(points_fine)
-        point_colors.append(rgb_map_fine)
-
-        tbar.update(1)
-
-    # Visualize accumulated point clouds
-    points = np.concatenate(point_clouds, 0)
-    rgb_map = np.concatenate(point_colors, 0)
-    pcd = build_colored_pointcloud(points, rgb_map)
+    # Visualize
+    color = 1 - np.expand_dims(density, 1) * np.ones_like(points) / density_range
+    color = color.clip(0., 1.)
+    pcds = [build_colored_pointcloud(points, color)]
     coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0)
-    o3d.visualization.draw_geometries([pcd, coord_frame])
+    pcds.append(coord_frame)
+    o3d.visualization.draw_geometries(pcds)
+
+    """
+    # Visualize 2D slice planes
+    # """
+    # density_range = 100 # 2000
+    # # for t in range(points.shape[1]):
+    # #     density_t = density[:, t]
+    # for t in range(points.shape[2]):
+    #     density_t = density[:, :, t]
+    #     density_map = (density_t / density_range).clip(0., 1.)
+    #     save_path = osp.join(save_render_base, '%06d.png' % (t))
+    #     imageio.imwrite(save_path, density_map)
