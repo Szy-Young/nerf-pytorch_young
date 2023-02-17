@@ -21,16 +21,16 @@ python test_nerf.py config/llff/fern_softplus.yaml --checkpoint 199000
 
 Testing results on some scenes (**PSNR**):
 
-| blender            | lego | ship | mic   |
-|--------------------| --- | --- |-------|
-| reported by paper  |32.54|28.65| 32.91 |
-| our implementation |31.21|29.09| 32.85 |
+| blender            | lego   | ship  | mic   |
+|--------------------|--------|-------|-------|
+| reported by paper  | 32.54  | 28.65 | 32.91 |
+| our implementation | 31.24 | 28.89 | 32.86 |
 
 
-| blender            | fern | trex | horns |
-|--------------------| --- | --- |-------|
-| reported by paper  |25.17|26.80| 27.45 |
-| our implementation |26.72|27.70| 28.50 |
+| blender            | fern  | trex  | horns |
+|--------------------|-------|-------|-------|
+| reported by paper  | 25.17 | 26.80 | 27.45 |
+| our implementation | 26.73 | 27.60 | 28.49 |
 
 Visualize the colored point clouds (RGB & Depth map from volume rendering)
 
