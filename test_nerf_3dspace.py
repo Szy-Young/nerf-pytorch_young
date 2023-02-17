@@ -115,58 +115,61 @@ if __name__ == '__main__':
     """
     Directly observe the NeRF density at 3D space points
     """
-    volume_size = 2.0
-    volume_sample = 400
-    points = torch.linspace(-volume_size, volume_size, steps=volume_sample+1)
+    volume_size = 4.0
+    volume_sample = 200
+    points = torch.linspace(-0.5*volume_size, 0.5*volume_size, steps=volume_sample+1)
     points = torch.stack(torch.meshgrid([points, points, points]), -1)
     points = points.reshape(-1, 3)
 
     # Batchify
-    density = []
+    rgb, density = [], []
     for i in range(0, points.shape[0], args.chunk_point):
         # Forward
         with torch.no_grad():
             points_batch = points[i:(i + args.chunk_point)]
             viewdirs_batch = torch.ones_like(points_batch)       # viewdirs is not used, feed any value is OK
-            _, density_batch = point_query(points_batch, viewdirs_batch,
+            viewdirs_batch = viewdirs_batch / viewdirs_batch.norm(dim=1, keepdim=True)
+            rgb_batch, density_batch = point_query(points_batch, viewdirs_batch,
                                            point_embedding, view_embedding, model, model_fine,
                                            fine_sampling=fine_sampling)
+            rgb.append(rgb_batch)
             density.append(density_batch)
 
+    rgb = torch.cat(rgb, 0)
+    rgb = rgb.reshape([volume_sample+1, volume_sample+1, volume_sample+1, 3]).cpu().numpy()
     density = torch.cat(density, 0)
-    density = density.reshape([volume_sample+1, volume_sample+1, volume_sample+1]).cpu().numpy()
+    alpha = 1. - torch.exp(- density * volume_size / volume_sample)
+    alpha = alpha.reshape([volume_sample+1, volume_sample+1, volume_sample+1]).cpu().numpy()
     points = points.reshape([volume_sample+1, volume_sample+1, volume_sample+1, 3]).cpu().numpy()
 
     """
     Visualize non-empty 3D points
     """
     # Filter out empty points
-    density_thresh = 100
-    density_range = 200
-    valid = (density > density_thresh)
-    points, density = points[valid], density[valid]
+    alpha_thresh = 0.5
+    valid = (alpha > alpha_thresh)
+    points_sel, alpha_sel, rgb_sel = points[valid], alpha[valid], rgb[valid]
 
     # # Check density range
     # import matplotlib.pyplot as plt
-    # plt.plot(np.sort(density))
+    # plt.plot(np.sort(alpha))
     # plt.show()
 
     # Visualize
-    color = 1 - np.expand_dims(density, 1) * np.ones_like(points) / density_range
-    color = color.clip(0., 1.)
-    pcds = [build_colored_pointcloud(points, color)]
+    pcds = []
     coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0)
     pcds.append(coord_frame)
+    color = 1 - np.expand_dims(alpha_sel, 1) * np.ones_like(points_sel)
+    color = color.clip(0., 1.)
+    pcds.append(build_colored_pointcloud(points_sel, color))
+    rgb_sel = rgb_sel.clip(0., 1.)
+    pcds.append(build_colored_pointcloud(points_sel, rgb_sel).translate([volume_size, 0., 0.]))
     o3d.visualization.draw_geometries(pcds)
 
     """
     # Visualize 2D slice planes
     # """
-    # density_range = 100 # 2000
-    # # for t in range(points.shape[1]):
-    # #     density_t = density[:, t]
-    # for t in range(points.shape[2]):
-    #     density_t = density[:, :, t]
-    #     density_map = (density_t / density_range).clip(0., 1.)
-    #     save_path = osp.join(save_render_base, '%06d.png' % (t))
-    #     imageio.imwrite(save_path, density_map)
+    for t in range(points.shape[2]):
+        alpha_map = alpha[:, :, t]
+        save_path = osp.join(save_render_base, '%06d.png' % (t))
+        imageio.imwrite(save_path, alpha_map)

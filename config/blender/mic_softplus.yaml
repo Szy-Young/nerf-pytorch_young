@@ -8,8 +8,8 @@ wandb:
 
 # Data
 dataset_type: blender
-data_root: /home/ziyang/Desktop/Datasets/nerf_dataset/nerf_synthetic/mic
-#data_root: /media/SSD/ziyang/Datasets/nerf_dataset/nerf_synthetic/mic
+#data_root: /home/ziyang/Desktop/Datasets/nerf_dataset/nerf_synthetic/mic
+data_root: /media/SSD/ziyang/Datasets/nerf_dataset/nerf_synthetic/mic
 
 # Fourier embedding
 n_freq_point: 10

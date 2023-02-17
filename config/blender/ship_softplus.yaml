@@ -8,8 +8,8 @@ wandb:
 
 # Data
 dataset_type: blender
-data_root: /home/ziyang/Desktop/Datasets/nerf_dataset/nerf_synthetic/ship
-#data_root: /media/SSD/ziyang/Datasets/nerf_dataset/nerf_synthetic/ship
+#data_root: /home/ziyang/Desktop/Datasets/nerf_dataset/nerf_synthetic/ship
+data_root: /media/SSD/ziyang/Datasets/nerf_dataset/nerf_synthetic/ship
 
 # Fourier embedding
 n_freq_point: 10

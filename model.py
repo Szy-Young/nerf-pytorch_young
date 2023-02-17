@@ -75,7 +75,8 @@ class NeRF(nn.Module):
         #     self.rgb_fc = nn.Linear(n_dim, 3)
 
         # Output activations
-        act_fns = {'sigmoid': lambda x: torch.sigmoid(x),
+        act_fns = {'identity': lambda x: x,
+                   'sigmoid': lambda x: torch.sigmoid(x),
                    'relu': lambda x: F.relu(x),
                    'softplus': lambda x: F.softplus(x),
                    'shifted_softplus': lambda x: F.softplus(x - 1)}
