@@ -103,9 +103,6 @@ if __name__ == '__main__':
         weight_path_fine = osp.join(args.exp_base, 'model_%06d_fine.pth.tar'%(args.checkpoint))
         model_fine.load_state_dict(torch.load(weight_path_fine))
 
-    # Create the loss
-    img_loss = nn.MSELoss(reduction='mean')
-
     # Create path to save rendered images
     exp_base = args.exp_base
     save_render_base = osp.join(exp_base, 'test_%06d_3dspace'%(args.checkpoint))

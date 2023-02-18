@@ -27,7 +27,7 @@ Testing results on some scenes (**PSNR**):
 | our implementation | 31.24 | 28.89 | 32.86 |
 
 
-| blender            | fern  | trex  | horns |
+| llff               | fern  | trex  | horns |
 |--------------------|-------|-------|-------|
 | reported by paper  | 25.17 | 26.80 | 27.45 |
 | our implementation | 26.73 | 27.60 | 28.49 |
