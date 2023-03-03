@@ -64,6 +64,7 @@ def nerf_render(rays,
                                                                    z_vals,
                                                                    rays_d,
                                                                    white_bkgd)
+    depth_map = depth_map + (1. - acc_map) * rays.far
     # Collect_results
     ret_dict = {'rgb_map': rgb_map,
                 'depth_map': depth_map,
@@ -94,6 +95,7 @@ def nerf_render(rays,
                                                                        z_vals,
                                                                        rays_d,
                                                                        white_bkgd)
+        depth_map = depth_map + (1. - acc_map) * rays.far
         # Collect_results
         ret_dict_fine = {'rgb_map_fine': rgb_map,
                          'depth_map_fine': depth_map,

@@ -240,6 +240,7 @@ if __name__ == '__main__':
 
             # Batchify
             rgb_map, rgb_map_fine = [], []
+            depth_map, depth_map_fine = [], []
             for i in range(0, rays_o.shape[0], args.chunk_ray):
                 # Forward
                 with torch.no_grad():
@@ -254,29 +255,42 @@ if __name__ == '__main__':
                                            white_bkgd=args.white_bkgd)
 
                     rgb_map.append(ret_dict['rgb_map'])
+                    depth_map.append(ret_dict['depth_map'])
                     if fine_sampling:
                         rgb_map_fine.append(ret_dict['rgb_map_fine'])
+                        depth_map_fine.append(ret_dict['depth_map_fine'])
 
             rgb_map = torch.cat(rgb_map, 0).reshape(target.shape)
             loss_img = img_loss(rgb_map, target)
             psnr = mse_to_psnr(loss_img.detach().cpu())
+            depth_map = torch.cat(depth_map, 0).reshape(target.shape[:2])
             if fine_sampling > 0:
                 rgb_map_fine = torch.cat(rgb_map_fine, 0).reshape(target.shape)
                 loss_img_fine = img_loss(rgb_map_fine, target)
                 psnr_fine = mse_to_psnr(loss_img_fine.detach().cpu())
+                depth_map_fine = torch.cat(depth_map_fine, 0).reshape(target.shape[:2])
             else:
                 loss_img_fine = torch.zeros()
                 psnr_fine = torch.zeros()
+            val_log = {"val_loss": loss_img.item(), "val_loss_fine": loss_img_fine.item(),
+                       "val_psnr": psnr.item(), "val_psnr_fine": psnr_fine.item()}
+            train_log = train_log | val_log
 
             # Add validation logs
             rgb_map = rgb_map.cpu().numpy().clip(0., 1.)
             rgb_map = wandb.Image(rgb_map, caption="coarse rendering")
-            rgb_map_fine = rgb_map_fine.cpu().numpy().clip(0., 1.)
-            rgb_map_fine = wandb.Image(rgb_map_fine, caption="fine rendering")
-            val_log = {"val_loss": loss_img.item(), "val_loss_fine": loss_img_fine.item(),
-                       "val_psnr": psnr.item(), "val_psnr_fine": psnr_fine.item(),
-                       'val_img': rgb_map, 'val_img_fine': rgb_map_fine}
-            train_log = train_log | val_log
+            depth_map = (depth_map / far).cpu().numpy().clip(0., 1.)
+            depth_map = (255 * (1. - depth_map)).astype(np.uint8)
+            depth_map = wandb.Image(depth_map, caption="coarse depth")
+            if fine_sampling:
+                rgb_map_fine = rgb_map_fine.cpu().numpy().clip(0., 1.)
+                rgb_map_fine = wandb.Image(rgb_map_fine, caption="fine rendering")
+                depth_map_fine = (depth_map_fine / far).cpu().numpy().clip(0., 1.)
+                depth_map_fine = (255 * (1. - depth_map_fine)).astype(np.uint8)
+                depth_map_fine = wandb.Image(depth_map_fine, caption="fine depth")
+            render_log = {'val_img': rgb_map, 'val_img_fine': rgb_map_fine,
+                          'val_depth': depth_map, 'val_depth_fine': depth_map_fine}
+            train_log = train_log | render_log
 
         # Logging
         if args.use_wandb:
